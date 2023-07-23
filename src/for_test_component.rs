@@ -9,18 +9,24 @@ use leptos::tracing;
 use leptos::{component, view, IntoView, RwSignal, Scope, View};
 use std::borrow::Cow;
 use std::clone::Clone;
+use std::collections::HashMap;
 
+/// Models a piece of data keyed (uniquely identified) by some `key` function
 pub trait KeyedData {
     fn key(&self) -> Cow<'_, String>;
     fn data(&self, cx: Scope) -> View;
 }
 
-const BIG_DATA_SIZE: usize = 8*1024;
+const BIG_DATA_SIZE: usize = 8 * 1024;
 
+/// Models a row of data which includes a key and the data portion
 #[derive(Debug)]
 pub struct Row {
+    /// The unique identifier for the data
     key: String,
+    /// The value associated with the row
     pub value: String,
+    // Just to feel the impact of large rows and the effect of cloning, additional data
     big_data: [u32; BIG_DATA_SIZE],
 }
 
@@ -40,16 +46,18 @@ impl Clone for Row {
         Self {
             key: self.key.clone(),
             value: self.value.clone(),
-            big_data: self.big_data
+            big_data: self.big_data,
         }
     }
 }
 
 impl KeyedData for Row {
+    /// Return the unique identifier
     fn key(&self) -> Cow<'_, String> {
         Cow::Borrowed(&self.key)
     }
 
+    /// Creates a view of the data for a row
     fn data(&self, cx: Scope) -> View {
         view! { cx,
             <span>
@@ -97,44 +105,44 @@ pub fn ForTestComponent(
     use std::collections::HashMap;
     use std::rc::Rc;
 
-    let mut signals = HashMap::<String, RwSignal<usize>>::with_capacity(rows.len());
+    let signals = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| (row.key().into_owned(), create_rw_signal(cx, i)))
+        .collect::<HashMap<String, RwSignal<usize>>>();
 
-    let entries = {
-        rows.iter().enumerate().for_each(|(i, s)| {
-            signals.insert(s.key().into_owned(), create_rw_signal(cx, i));
-        });
-        create_rw_signal(cx, Rc::new(RefCell::new(rows)))
-    };
-
-    let num_elements = move || entries.with(|entries| entries.borrow().len());
-
-    let nth_key = move |n: usize| {
-        entries.with_untracked(|entries| entries.borrow().get(n).map(|entry| entry.key.clone()))
-    };
+    let entries = create_rw_signal(cx, rows);
 
     let signals = store_value(cx, signals);
 
+    // Reactive number of elements
+    let num_elements = move || entries.with(|entries| entries.len());
+
+    // Get the nth key by accessing the vector in a non-reactive way to get the element
+    // and then get a copy of the key
+    let nth_key = move |n: usize| {
+        entries.with_untracked(|entries| entries.get(n).map(|entry| entry.key.clone()))
+    };
+
+    // Reactively grab the signal associated with a key. Note the convenient clone of
+    // the signal which is just a few id's used to lookup the actual data in leptos
     let key_signal =
         move |key: &String| signals.with_value(|signals| signals.get(key).unwrap().clone());
 
+    // Delete a row by key. In addition to deleting the row it patches the index of all
+    // rows after the row identified by key. Since those rows will shift down to accommodate
+    // the removal, their indices must be updated.
     let delete_by_key = move |key: &String| {
-        let position = entries
-            .with_untracked(|entries| entries.borrow().iter().position(|entry| &entry.key == key));
-        if let Some(position) = position {
+        if let Some(position) =
+            signals.with_value(|signals| signals.get(key).cloned().map(|signal| signal.get()))
+        {
             entries.update(|entries| {
-                //let index_changes = (position..(entries.len()-1)).iter().map(|i| )
                 signals.update_value(|signals| {
-                    let mut entries = entries.as_ref().borrow_mut();
                     entries.remove(position);
                     let len = entries.len();
                     let elements_after = &entries[position..len];
                     for (i, element) in elements_after.iter().enumerate() {
                         if let Some(entry) = signals.get_mut(&element.key) {
-                            log!(
-                                "Updating i from {:?} to {}",
-                                entry.get_untracked(),
-                                position + i
-                            );
                             entry.update_untracked(|e| *e = position + i);
                         }
                     }
@@ -143,33 +151,29 @@ pub fn ForTestComponent(
         }
     };
 
-    let i_by_key =
-        move |key: &String| signals.with_value(|signals| signals.get(key).unwrap().get_untracked());
-
-    let (counter, set_i) = create_signal(cx, 1);
+    // A counter to label rows that are added so can have distinct keys.
+    let (add_item_counter, set_add_item_counter) = create_signal(cx, 1);
 
     view! { cx,
         <h3>{move || { format!("There are {} entries", num_elements()) }}</h3>
         <button on:click=move |_| {
-            log!("Adding entry");
             let next_i = num_elements();
             entries
                 .update(|entries| {
-                    let key = format!("auto-added key {}", counter.get());
-                    entries
-                        .borrow_mut()
-                        .push(Row::new(&key, &format!("value {}", counter.get())));
+                    let count = add_item_counter.get();
+                    let key = format!("auto-added key {}", count);
+                    entries.push(Row::new(&key, &format!("value {}", count)));
                     signals
                         .update_value(|signals| {
                             signals.insert(key, create_rw_signal(cx, next_i));
                         });
-                    set_i.update(|i_| *i_ += 1);
+                    set_add_item_counter.update(|i| *i += 1);
                 })
-        }>"Add String"</button>
+        }>"Add Row"</button>
         <hr/>
         <For
-            each=move || { 0..num_elements() }
-            key=move |&i| { nth_key(i) }
+            each=move || 0..num_elements()
+            key=move |&i| nth_key(i)
             view=move |cx, i| {
                 let key = Rc::new(nth_key(i).unwrap());
                 let key_for_update = Rc::clone(&key);
@@ -178,28 +182,26 @@ pub fn ForTestComponent(
                 view! { cx,
                     <div>
                         <button on:click=move |_| {
-                            log!("Delete clicked on {:?}", key);
                             delete_by_key(&key_for_delete);
                         }>"Delete Me"</button>
                         <button on:click=move |_| {
-                            let i = i_by_key(&*key_for_update);
-                            log!("Updating {i}");
-
-                            entries.with_untracked(|entries| {
-                                if let Some(entry) = entries.borrow_mut().get_mut(i) {
-                                    entry.value.push_str(".");
-                                }
-                                key_signal(&key_for_update).update(|_| {});
-                            });
+                            let key_signal = key_signal(&key_for_update);
+                            let reactive_i = key_signal.get();
+                            entries
+                                .update_untracked(|entries| {
+                                    if let Some(entry) = entries.get_mut(reactive_i) {
+                                        entry.value.push_str(".");
+                                    }
+                                });
+                            key_signal.update(|_| {});
                         }>"Update Me"</button>
                         <span style="padding-left: 10px;">
                             {move || {
                                 key_signal(&key_for_display)
                                     .with(|&i| {
-                                        //log!("(Re)display {i}");
                                         entries
                                             .with_untracked(|entries| {
-                                                if let Some(row) = entries.borrow().get(i) {
+                                                if let Some(row) = entries.get(i) {
                                                     row.data(cx)
                                                 } else {
                                                     view! { cx, <h4>"Error"</h4> }

@@ -54,9 +54,8 @@ pub fn ForTestEnumerateComponent(
 
     view! { cx,
         <button on:click=move |_| {
-            log!("Adding entry");
-
-        }>"Add String"</button>
+            log!("Adding Row");
+        }>"Add Row"</button>
         <hr/>
         <For
             each=move || { rows.get().into_iter().enumerate() }
@@ -66,6 +65,9 @@ pub fn ForTestEnumerateComponent(
                     <div>
                         <button on:click=move |_| {
                             log!("Delete clicked on {row:?}");
+                            rows.update(|rows| {
+                                rows.remove(i);
+                            });
                         }>"Delete Me"</button>
                         <button on:click=move |_| {
                             log!("Updating {i}");
@@ -81,7 +83,6 @@ pub fn ForTestEnumerateComponent(
                         }>"Update Me"</button>
                         <span style="padding-left: 10px;">
                             {move || {
-                                //log!("(Re)display {i}");
                                 let signal = signals.with_value(|signals| signals.get(i).unwrap().clone());
                                 signal.track();
                                 rows.with_untracked(|rows| rows.get(i).unwrap().data(cx))

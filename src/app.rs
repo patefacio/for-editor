@@ -41,13 +41,12 @@ fn HomePage(cx: Scope) -> impl IntoView {
     use crate::for_test_component::Row;
     use crate::for_test_enumerate_component::ForTestEnumerateComponent;
 
-    let rows = (0..1_000)
+    let rows = (0..5)
         .map(|i| Row::new(&format!("key {i}"), &format!("value {i}")))
         .collect::<Vec<_>>();
 
     view! { cx,
-        //<ForTestComponent rows=rows/>
+        <ForTestComponent rows=rows.clone()/>
         <hr/>
-        <ForTestEnumerateComponent rows=rows.clone()/>
     }
 }
