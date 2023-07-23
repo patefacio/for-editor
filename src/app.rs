@@ -48,5 +48,6 @@ fn HomePage(cx: Scope) -> impl IntoView {
     view! { cx,
         <ForTestComponent rows=rows.clone()/>
         <hr/>
+        //<ForTestEnumerateComponent rows=rows.clone()/>
     }
 }

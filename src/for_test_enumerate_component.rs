@@ -7,8 +7,7 @@ use super::for_test_component::{KeyedData, Row};
 #[allow(unused_imports)]
 use leptos::log;
 use leptos::tracing;
-use leptos::{component, view, IntoView, RwSignal, Scope};
-use std::borrow::Cow;
+use leptos::{component, view, IntoView, Scope};
 
 ////////////////////////////////////////////////////////////////////////////////////
 // --- functions ---
@@ -29,18 +28,13 @@ pub fn ForTestEnumerateComponent(
 
     tracing::debug!("This should go somewhere");
     use leptos::create_rw_signal;
-    use leptos::create_signal;
     use leptos::store_value;
     use leptos::For;
     use leptos::SignalGet;
-    use leptos::SignalGetUntracked;
     use leptos::SignalUpdate;
     use leptos::SignalUpdateUntracked;
     use leptos::SignalWith;
     use leptos::SignalWithUntracked;
-    use std::cell::RefCell;
-    use std::collections::HashMap;
-    use std::rc::Rc;
 
     let signals = store_value(
         cx,
